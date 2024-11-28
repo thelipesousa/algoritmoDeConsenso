@@ -1,18 +1,18 @@
+import random
+
+
 class Network:
-    def __init__(self):
-        self.nodes = {}
+    def __init__(self, nodes):
+        self.nodes = nodes
 
-    def add_node(self, node):
-        """Adiciona um nó à rede."""
-        self.nodes[node.node_id] = node
+    def start(self):
+        """Inicia todos os nós da rede."""
+        for node in self.nodes:
+            node.start()
 
-    async def broadcast(self, sender_id, message):
-        """Simula o envio de uma mensagem para todos os nós."""
-        for node_id, node in self.nodes.items():
-            if node_id != sender_id:
-                await node.receive_message(message)
-
-    async def send_message(self, sender_id, receiver_id, message):
-        """Simula o envio de uma mensagem para um nó específico."""
-        if receiver_id in self.nodes:
-            await self.nodes[receiver_id].receive_message(message)
+    def simulate_failure(self):
+        """Simula uma falha em um nó aleatório."""
+        active_nodes = [node for node in self.nodes if not node.failed]
+        if active_nodes:
+            node_to_fail = random.choice(active_nodes)
+            node_to_fail.simulate_failure()

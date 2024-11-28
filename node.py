@@ -1,38 +1,75 @@
+import threading
+import time
 import random
-import asyncio
+
 
 class Node:
-    def __init__(self, node_id, peers):
-        self.node_id = node_id
-        self.peers = peers  # Lista de IDs dos outros nós
-        self.state = "follower"  # Estados: follower, candidate, leader
-        self.current_term = 0
-        self.voted_for = None
-        self.logs = []  # Simulação de um log
-        self.election_timer = None
+    def __init__(self, id, nodes):
+        self.id = id
+        self.nodes = nodes  # Lista de nós na rede
+        self.state = "follower"
+        self.term = 0
+        self.votes = 0
+        self.failed = False
+        self.is_leader = False
+        self.lock = threading.Lock()
 
-    async def start(self):
-        """Inicia o nó como um seguidor."""
-        print(f"Nó {self.node_id} iniciado como {self.state}.")
-        await self.run_follower()
+    def start(self):
+        """Inicia o nó e seu comportamento em uma thread separada."""
+        threading.Thread(target=self.run, daemon=True).start()
 
-    async def run_follower(self):
-        """Comportamento do nó como seguidor."""
-        self.reset_election_timer()
-        while self.state == "follower":
-            await asyncio.sleep(0.1)
+    def run(self):
+        """Executa o ciclo de um nó no algoritmo Raft."""
+        while not self.failed:
+            if self.state == "follower":
+                self.wait_for_leader()
+            elif self.state == "candidate":
+                self.start_election()
+            time.sleep(1)
 
-    def reset_election_timer(self):
-        """Reinicia o temporizador de eleição."""
-        timeout = random.uniform(1.0, 2.0)  # Temporizador aleatório
-        self.election_timer = asyncio.get_event_loop().call_later(
-            timeout, self.start_election
-        )
+    def wait_for_leader(self):
+        """Espera por um líder ou inicia uma eleição."""
+        timeout = random.uniform(2, 5)
+        time.sleep(timeout)
+
+        if not self.is_leader and not any(node.is_leader for node in self.nodes if not node.failed):
+            self.state = "candidate"
 
     def start_election(self):
-        """Inicia uma eleição como candidato."""
-        print(f"Nó {self.node_id} iniciou uma eleição.")
-        self.state = "candidate"
-        self.current_term += 1
-        self.voted_for = self.node_id
-        # Lógica para pedir votos será implementada aqui
+        """Inicia uma eleição."""
+        with self.lock:
+            self.term += 1
+            self.votes = 1  # Vota em si mesmo
+            print(f"Nó {self.id} iniciou uma eleição (Termo: {self.term}).")
+
+            for node in self.nodes:
+                if node.id != self.id and not node.failed:
+                    node.receive_vote(self)
+
+            if self.votes > len(self.nodes) // 2:
+                self.become_leader()
+
+    def receive_vote(self, candidate):
+        """Recebe uma solicitação de voto."""
+        with self.lock:
+            if candidate.term >= self.term and not self.failed:
+                candidate.votes += 1
+                print(f"Nó {self.id} votou no nó {candidate.id}.")
+
+    def become_leader(self):
+        """Assume o papel de líder."""
+        self.is_leader = True
+        self.state = "leader"
+        print(f"Nó {self.id} tornou-se o líder (Termo: {self.term}).")
+        self.send_heartbeats()
+
+    def send_heartbeats(self):
+        """Envia batimentos cardíacos para os seguidores."""
+        while self.is_leader and not self.failed:
+            print(f"Nó {self.id} enviando batimentos cardíacos.")
+            time.sleep(2)
+
+    def simulate_failure(self):
+        """Simula a falha do nó."""
+        self.failed = True
+        print(f"Nó {self.id} falhou.")
